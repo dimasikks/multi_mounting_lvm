@@ -1,0 +1,8 @@
+- name: MOUNTING DISKS
+  become: true
+  hosts: all
+  roles:
+    - role: ../roles/configure_disks
+      tags: [ configure_disks ]
+  vars:
+    mounted_paths: []

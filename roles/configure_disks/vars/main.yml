@@ -1,0 +1,9 @@
+---
+vg: vgroup_1
+size: 100G
+postfix: _1
+fstab:
+  filesystem: ext4
+  options: errors=remount-ro
+  opt_1: 0
+  opt_2: 1

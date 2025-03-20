@@ -1,0 +1,6 @@
+all:
+  hosts:
+    storage-test:
+      ansible_host: localhost
+      ansible_user: 
+      ansible_password: 

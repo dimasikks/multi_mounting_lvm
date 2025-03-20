@@ -1,0 +1,119 @@
+---
+- name: TRANSFORM THE OBTAINED VALUES ​​INTO THE disk:mount_path FORMAT AND WRITE IT ALL DOWN INTO THE paths
+  ansible.builtin.set_fact:
+    paths: "{{ input.split(',') }}"
+
+- name: CHECKING DISKS FOR MOUNTING
+  block:      
+    - name: COMPARE DISKS FROM EXTRA_ARGS WITH MOUNTED ONES
+      ansible.builtin.debug:
+        msg: "Disk {{ item.split(':')[0] }} is not mounted"
+      loop: "{{ paths }}"
+      when: "hostvars[inventory_hostname].ansible_devices[item.split(':')[0]].partitions | length == 0"
+      register: not_mounted_result
+
+    - name: CHECKING FOR MOUNTED DISKS - ERROR MEANS THE DISK IS ALREADY MOUNTED
+      ansible.builtin.debug:
+        msg: "{{ item.item.split(':')[0] }}"
+      failed_when: "item.skipped is defined"
+      when: "item.skipped is defined"
+      loop: "{{ not_mounted_result.results }}"
+  tags: [ check_disks ]
+
+- name: CHECKING PATHS FOR MOUNTING
+  block:
+    - name: TAKE ALL PATHS WITH MOUNTED DISKS
+      ansible.builtin.set_fact:
+        mounted_paths: "{{ mounted_paths + [item.mount] }}"
+      loop: "{{ hostvars[inventory_hostname].ansible_mounts }}"
+
+    - name: COMPARE PATHS FROM EXTRA_ARGS WITH MOUNTED ONES
+      ansible.builtin.debug:
+        msg: "Path {{ item.split(':')[1] }} is not used"
+      loop: "{{ paths }}"
+      when: "item.split(':')[1] not in mounted_paths"
+      register: not_mounted_paths_result
+
+    - name: CHECKING FOR USED PATHS FOR MOUNTING - ERROR MEANS THAT THE PATH IS ALREADY USED FOR MOUNTING
+      ansible.builtin.debug:
+        msg: "{{ item.item.split(':')[1] }}"
+      failed_when: "item.skipped is defined"
+      loop: "{{ not_mounted_paths_result.results }}"
+  tags: [ check_paths ]
+
+- name: PLEASE CHECK THE INFORMATION BELOW AND PROCEED FOR FURTHER INSTALLATION
+  ansible.builtin.debug:
+    msg: "Disk: {{ '/dev/'+item.split(':')[0] }}, mounting path: {{ item.split(':')[1] }}"
+  loop: "{{ paths }}"
+
+- pause:
+
+- name: START MOUNTING DISKS
+  block:
+    - name: INSTALL lvm2
+      ansible.builtin.apt:
+        name: lvm2
+        state: present
+    
+    - name: MAKE DIRECTORIES FOR MOUNTING
+      ansible.builtin.file:
+        path: "{{ item.split(':')[1] }}"
+        state: directory
+        mode: '0755'
+      loop: "{{ paths }}"
+
+    - name: CREATE DISKS FOR WORKING WITH LVM AND A LOGICAL VOLUME GROUP
+      ansible.builtin.lvg:
+        vg: "{{ vg }}"
+        pvs: "/dev/{{ item.split(':')[0] }}"
+      loop: "{{ paths }}"
+    
+    - name: CREATE LOGICAL VOLUMES ON DISKS
+      ansible.builtin.lvol:
+        vg: "{{ vg }}"
+        pvs: "/dev/{{ item.split(':')[0] }}"
+        lv: "{{ item.split(':')[0] }}{{ postfix }}"
+        size: "{{ size }}"
+      loop: "{{ paths }}"
+
+    - name: CREATE FILESYSTEM
+      ansible.builtin.filesystem:
+        dev: "/dev/{{ vg }}/{{ item.split(':')[0] }}{{ postfix }}"
+        fstype: ext4
+      loop: "{{ paths }}"
+
+    - name: MOUNT LOGICAL VOLUMES TO THE SPECIFIED PATHS
+      ansible.builtin.mount:
+        src: "/dev/{{ vg }}/{{ item.split(':')[0] }}{{ postfix }}"
+        path: "{{ item.split(':')[1] }}"
+        state: mounted
+      loop: "{{ paths }}"
+
+    - name: MAKE COPY /etc/fstab
+      ansible.builtin.copy:
+        src: /etc/fstab
+        dest: /etc/fstab.bak
+        remote_src: yes
+
+    - name: TAKE blkid FROM NEWLY MOUNTED DISKS
+      ansible.builtin.shell: 
+        cmd: blkid /dev/{{ vg }}/{{ item.split(':')[0] }}{{ postfix }} | awk '{gsub(/"/, ""); print $2}'
+      loop: "{{ paths }}"
+      register: output
+
+    - name: ADD CHANGES TO /etc/fstab
+      ansible.builtin.blockinfile:
+        path: /etc/fstab
+        block: |
+          {% for disk_input in paths %}
+          {{ "{:<50}".format(item.stdout) }}{{ "{:<20}".format(disk_input.split(':')[1]) }}{{ "{:<10}".format(fstab.filesystem) }}{{ "{:<20}".format(fstab.options) }}{{ "{:<5}".format(fstab.opt_1) }}{{ "{:<5}".format(fstab.opt_2) }}
+          {% endfor %}
+      loop: "{{ output.results }}"
+
+    - name: APPLYING CHANGES
+      ansible.builtin.shell: mount -a; lsblk
+      register: result
+
+    - name: RESULT
+      ansible.builtin.debug:
+        msg: "{{ result.stdout }}"
