@@ -6,3 +6,6 @@
       tags: [ configure_disks ]
   vars:
     mounted_paths: []
+    disks: []
+    result_paths: []
+    blkids: []
