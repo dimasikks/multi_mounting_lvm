@@ -14,9 +14,8 @@ ansible-playbook playbooks/configure_disks.yml -i inventories/groups/storage-tes
 Example
 --------------
 ```bash
-ansible-playbook playbooks/configure_disks.yml -i inventories/groups/storage-test.yml --extra-vars 'input=sda:/storage-1,sdb:/storage-2,sdc:/storage-3 size=500G'
+ansible-playbook playbooks/configure_disks.yml -i inventories/groups/storage-test.yml --extra-vars 'input=sda:/storage-1,sdb:/storage-2,sdc:/storage-3 size=500'
 ```
-
 
 Requirements
 ----------
