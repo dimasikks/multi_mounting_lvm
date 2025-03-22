@@ -1,6 +1,6 @@
 ---
 vg: vgroup_1
-size: 100G
+size: 100
 postfix: _1
 fstab:
   filesystem: ext4
